@@ -1,0 +1,3285 @@
+{
+  "updatedAt": "2026-02-09T11:37:23.349Z",
+  "createdAt": "2026-01-30T16:57:58.209Z",
+  "id": "PlRDmPq3DiSdCLmuHoAFc",
+  "name": "page_principal",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://api.themoviedb.org/3/movie/now_playing?language=pt-BR&region=BR",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        192,
+        -1104
+      ],
+      "id": "e6270750-4213-4c04-a36d-bf361b9cfe99",
+      "name": "HTTP Request1",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "pGkVDlfdCBPubUGH",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "lovable",
+        "responseMode": "responseNode",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Content-Type",
+                "value": "Application/json"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -2512,
+        -16
+      ],
+      "id": "a1586cef-40c6-447f-933d-7650655a2448",
+      "name": "Webhook",
+      "webhookId": "b97bb757-b10f-43b8-b6d5-c0e102279e9e"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1120,
+        -1088
+      ],
+      "id": "cb9f08c6-a32a-4c3c-b4a2-f5347f8c454a",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        736,
+        -1088
+      ],
+      "id": "84aac72b-81a5-4276-bc8e-cf7325c6f11e",
+      "name": "Merge",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "url": "=https://api.themoviedb.org/3/movie/{{ $json.id }}/videos",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        576,
+        -928
+      ],
+      "id": "492422a3-295b-4d9b-a996-cb7cfe54a0fc",
+      "name": "busca id para video",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "pGkVDlfdCBPubUGH",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "results",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        400,
+        -1104
+      ],
+      "id": "4586917d-9294-47a8-875b-1937138ea6b8",
+      "name": "Split Out"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ===== PROCESSADOR ULTRA-RÁPIDO DE FILMES =====\nlet filmes = [];\nconst items = $input.all();\n\n// Normaliza entrada\nif (items.length === 1 && items[0].json.results) {\n    filmes = items[0].json.results;\n} else {\n    filmes = items.map(item => item.json);\n}\n\nconst filmesProcessados = filmes.slice(0, 10).map(filme => {\n  \n  // 1. VÍDEO\n  let videoUrl = null;\n  const listaVideos = filme.results || (filme.videos?.results) || [];\n  \n  if (Array.isArray(listaVideos) && listaVideos.length > 0) {\n      const video = listaVideos.find(v => v.type === \"Trailer\" && v.site === \"YouTube\") || \n                    listaVideos.find(v => v.site === \"YouTube\");\n      \n      if (video?.key && /^[a-zA-Z0-9_-]{11}$/.test(video.key)) {\n          videoUrl = `https://www.youtube.com/embed/${video.key}`;\n      }\n  }\n\n  // 2. IMAGENS\n  const posterUrl = filme.poster_path \n      ? `https://image.tmdb.org/t/p/w500${filme.poster_path}` \n      : null;\n\n  const backdropUrl = filme.backdrop_path\n      ? `https://image.tmdb.org/t/p/w780${filme.backdrop_path}`\n      : null;\n\n  // 3. HEADLINE (primeira frase impactante)\n  const overview = filme.overview || \"Confira os detalhes deste filme.\";\n  const frases = overview.split(/[.!?]/).filter(f => f.trim().length > 15);\n  const headline = frases.length > 0 \n    ? frases[0].trim() + '.'\n    : overview.substring(0, 100) + '...';\n\n  // 4. SINOPSE (limitada)\n  const sinopse = overview.length > 300 \n    ? overview.substring(0, 297) + '...'\n    : overview;\n\n  // 5. TRADUÇÃO BÁSICA DO TÍTULO\n  let tituloPT = filme.title || filme.original_title || \"Título Desconhecido\";\n  \n  // Regras simples de tradução\n  const traducoes = {\n    \"^The \": \"O \",\n    \"^A \": \"Um \",\n    \"^An \": \"Um \"\n  };\n  \n  Object.entries(traducoes).forEach(([en, pt]) => {\n    tituloPT = tituloPT.replace(new RegExp(en, 'i'), pt);\n  });\n\n  return {\n    id_original: filme.id,\n    titulo_pt: tituloPT,\n    headline: headline,\n    sinopse: sinopse,\n    ano: filme.release_date ? filme.release_date.split('-')[0] : \"----\",\n    poster: posterUrl,\n    backdrop: backdropUrl,\n    nota: filme.vote_average ? Number(filme.vote_average.toFixed(1)) : 0,\n    video_url: videoUrl\n  };\n});\n\nreturn {\n  json: {\n    status: \"sucesso\",\n    total_filmes: filmesProcessados.length,\n    data_atualizacao:  $now.toFormat('dd/MM/yyyy HH:mm') ,\n    filmes: filmesProcessados\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        928,
+        -1088
+      ],
+      "id": "b5f1b416-daac-4075-a071-de499dba16c8",
+      "name": "Code in JavaScript2"
+    },
+    {
+      "parameters": {
+        "url": "https://api.themoviedb.org/3/search/movie",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "={{ $json.body.search }}"
+            },
+            {
+              "name": "language",
+              "value": "pt-BR"
+            },
+            {
+              "name": "region",
+              "value": "BR"
+            },
+            {
+              "name": "include_adult",
+              "value": "false"
+            },
+            {
+              "name": "page",
+              "value": "={{ $json.body.page || 1 }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        48,
+        -544
+      ],
+      "id": "5e280867-3927-4203-87ce-f6806d54c466",
+      "name": "HTTP Request",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "pGkVDlfdCBPubUGH",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ===== PROCESSADOR DE FILMES - OTIMIZADO =====\nconst items = $input.all();\n\n// Garante que não processamos mais que 10 e evita erros se input for vazio\nif (!items.length) return { json: {} };\n\nconst filmesProcessados = items.slice(0, 10).map(item => {\n  // Garante acesso ao JSON, com fallback para objeto vazio\n  const filme = item.json || {}; \n  \n  // 1. VÍDEO (Lógica de Prioridade: Trailer YouTube > Qualquer YouTube)\n  let videoUrl = null;\n  // Fallback seguro caso 'results' venha undefined ou dentro de 'videos'\n  const listaVideos = filme.results || (filme.videos ? filme.videos.results : []) || [];\n  \n  if (Array.isArray(listaVideos) && listaVideos.length > 0) {\n    const video = listaVideos.find(v => v.type === \"Trailer\" && v.site === \"YouTube\") || \n                  listaVideos.find(v => v.site === \"YouTube\");\n    \n    if (video?.key) {\n      videoUrl = `https://www.youtube.com/embed/${video.key}`;\n    }\n  }\n\n  // 2. IMAGENS (Tratamento para null/undefined)\n  const posterUrl = filme.poster_path \n    ? `https://image.tmdb.org/t/p/w500${filme.poster_path}` \n    : \"https://via.placeholder.com/500x750?text=Sem+Poster\"; // Fallback opcional\n\n  const backdropUrl = filme.backdrop_path\n    ? `https://image.tmdb.org/t/p/w780${filme.backdrop_path}`\n    : null;\n\n  // 3. TEXTOS (Headline e Sinopse)\n  const overview = filme.overview || \"Sinopse indisponível.\";\n  // Divide por pontuação, remove espaços vazios e filtra frases muito curtas\n  const frases = overview.split(/[.!?]/).filter(f => f.trim().length > 15);\n  \n  const headline = frases.length > 0 \n    ? frases[0].trim() + '.'\n    : overview.substring(0, 100) + '...';\n\n  const sinopse = overview.length > 300 \n    ? overview.substring(0, 297) + '...'\n    : overview;\n\n  // 4. RETORNO DO OBJETO FORMATADO\n  return {\n    id_original: filme.id,\n    titulo_pt: filme.title || filme.original_title || \"Título Desconhecido\",\n    titulo_original: filme.original_title,\n    headline: headline,\n    sinopse: sinopse,\n    ano: filme.release_date ? filme.release_date.split('-')[0] : \"----\",\n    data_lancamento: filme.release_date || null,\n    poster: posterUrl,\n    backdrop: backdropUrl,\n    nota: filme.vote_average ? Number(filme.vote_average.toFixed(1)) : 0.0,\n    total_votos: filme.vote_count || 0,\n    popularidade: filme.popularity || 0,\n    video_url: videoUrl,\n    idioma_original: filme.original_language || \"en\"\n  };\n});\n\n// Acessa dados globais do webhook (meta-dados da requisição)\n// Nota: Use o Try/Catch ou Optional Chaining se houver risco do webhook não existir no teste manual\nconst searchTerm = $('Webhook')?.item?.json?.body?.searchTerm || \"Termo Teste\";\nconst page = $('Webhook')?.item?.json?.body?.page || 1;\n\nreturn {\n  json: {\n    status: \"sucesso\",\n    termo_pesquisado: searchTerm,\n    total_filmes: filmesProcessados.length,\n    pagina_atual: page,\n    data_pesquisa: $now.toFormat('dd/MM/yyyy HH:mm'),\n    filmes: filmesProcessados\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1248,
+        -640
+      ],
+      "id": "a61f7c7e-b367-428c-aca0-a8e8002787c5",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Mensagem quando não há resultados\nreturn {\n  json: {\n    status: \"sem_resultados\",\n    termo_pesquisado: $('Webhook').item.json.body.searchTerm,\n    mensagem: \"Nenhum filme encontrado com este termo de busca.\",\n    sugestoes: [\n      \"Verifique a ortografia\",\n      \"Tente usar o título original em inglês\",\n      \"Use termos mais genéricos\",\n      \"Tente pesquisar por palavras-chave do filme\"\n    ],\n    total_filmes: 0,\n    data_pesquisa: $now.toFormat('dd/MM/yyyy HH:mm'),\n    filmes: []\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        512,
+        -384
+      ],
+      "id": "05a3f20c-4f05-43b5-87b2-fe6c7470ea83",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "996f5b0d-cc7b-4f9b-ab1b-5ac68082359f",
+              "leftValue": "={{ $json.results }}",
+              "rightValue": "",
+              "operator": {
+                "type": "array",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "1a6e0131-d644-496e-8578-fa391563261b",
+              "leftValue": "={{ $json.total_results }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        256,
+        -544
+      ],
+      "id": "534fecce-ad39-45a3-b28e-bcdce79cef5a",
+      "name": "If1"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "results",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        720,
+        -656
+      ],
+      "id": "32969c92-8480-4105-8a1f-db1779d56ad5",
+      "name": "Split Out1"
+    },
+    {
+      "parameters": {
+        "url": "=https://api.themoviedb.org/3/movie/{{ $json.id }}/videos",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        896,
+        -528
+      ],
+      "id": "8863c873-7225-4105-a6be-d95a9ce0813e",
+      "name": "HTTP Request2",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "pGkVDlfdCBPubUGH",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Content-type",
+                "value": "Application/json"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1488,
+        -384
+      ],
+      "id": "d69b3565-ebce-4a00-8146-7e90658357e6",
+      "name": "Respond to Webhook1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. Pega os dados\nconst item = $input.first();\nconst json = item.json;\n\n// 2. Pega a lista original ou vazia\nconst todosFilmes = json.results || [];\n\n// 3. Corta para apenas 10 filmes\nconst top10Filmes = todosFilmes.slice(0, 20).map(filme => {\n    // Limpa os dados de cada filme\n    return {\n      id: filme.id,\n      title: filme.title || filme.original_title,\n      original_title: filme.original_title,\n      overview: filme.overview,\n      release_date: filme.release_date,\n      poster_path: filme.poster_path,\n      backdrop_path: filme.backdrop_path,\n      vote_average: filme.vote_average,\n      popularity: filme.popularity\n    };\n});\n\n// 4. RETORNA UM ÚNICO ITEM com o campo \"results\"\n// Assim o seu node \"Split Out\" vai conseguir ler!\nreturn {\n  json: {\n    results: top10Filmes\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        512,
+        -656
+      ],
+      "id": "47165afc-be4a-493c-ad29-022bd3a9ff3c",
+      "name": "Code in JavaScript3"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1072,
+        -640
+      ],
+      "id": "291aa7fd-5602-4d59-9479-f2ebdef98778",
+      "name": "Merge1"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "3e79d36f-83ec-45d1-9ca3-a3d675358af3",
+              "name": "rota",
+              "value": "={{ \n$json.body.type == 'category_filmes' ? 'category_filmes' : \n$json.body.type == 'category_serie' ? 'category_serie' : \n$json.body.type == 'tv' ? ($json.body.search ? 'pesquisa_series' : 'home_series') : \n($json.body.search ? 'pesquisa' : 'home') \n}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -2288,
+        -16
+      ],
+      "id": "8865269e-4bdb-4fd7-b661-f137f6018018",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.rota }}",
+                    "rightValue": "home",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "df570eda-59af-4974-9eb7-7d217c5911a4"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "home"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "214bba5a-8501-46b9-9235-f69ef278270d",
+                    "leftValue": "={{ $json.rota }}",
+                    "rightValue": "pesquisa",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "pesquisa"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "c5eba0f1-0bcc-4b45-9fef-37548811d855",
+                    "leftValue": "={{ $json.rota }}",
+                    "rightValue": "home_series",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "home_series"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "b2337961-94f8-4d45-8b4f-cdad8cb3c0ff",
+                    "leftValue": "={{ $json.rota }}",
+                    "rightValue": "pesquisa_series",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "pesquisa_series"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "d36c92a0-3ed5-4a65-bbe4-28201a2f6d5c",
+                    "leftValue": "={{ $json.rota }}",
+                    "rightValue": "category_filmes",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "categoria_filmes"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "f628b80b-f33f-4ea6-be7a-b16cef5b7479",
+                    "leftValue": "={{ $json.rota }}",
+                    "rightValue": "category_serie",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "categoria_serie"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        -2048,
+        -80
+      ],
+      "id": "acb4846f-9c28-4c99-a0a3-cd0213425e85",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "url": "https://api.themoviedb.org/3/tv/popular?language=pt-BR",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        368,
+        -96
+      ],
+      "id": "d77f0a2b-3c8f-4d78-9685-fc1c9489b9a3",
+      "name": "HTTP Request3",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "pGkVDlfdCBPubUGH",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1296,
+        -80
+      ],
+      "id": "db48cce8-0f14-415c-b790-e71023cf1662",
+      "name": "Respond to Webhook2"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        912,
+        -80
+      ],
+      "id": "9e1b9672-559b-46c2-af84-80aeef82f7e3",
+      "name": "Merge2",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "url": "=https://api.themoviedb.org/3/tv/{{ $json.id }}/videos",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        752,
+        80
+      ],
+      "id": "d96e3901-8727-4695-ac62-9096e0e3ca1b",
+      "name": "busca id para video1",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "pGkVDlfdCBPubUGH",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "results",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        576,
+        -96
+      ],
+      "id": "ff05ddda-4c87-451f-a3f5-c3f9ef907710",
+      "name": "Split Out2"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ===== PROCESSADOR DE SÉRIES (SUA VERSÃO AJUSTADA) =====\nlet series = [];\nconst items = $input.all();\n\n// 1. Normaliza entrada\nif (items.length === 1 && items[0].json.results) {\n    series = items[0].json.results;\n} else {\n    series = items.map(item => item.json);\n}\n\nconst seriesProcessadas = series.slice(0, 20).map(serie => {\n  \n  // 1. VÍDEO\n  let videoUrl = null;\n  const listaVideos = serie.results || (serie.videos?.results) || [];\n  \n  if (Array.isArray(listaVideos) && listaVideos.length > 0) {\n      const video = listaVideos.find(v => v.type === \"Trailer\" && v.site === \"YouTube\") || \n                    listaVideos.find(v => v.site === \"YouTube\");\n      \n      if (video?.key) {\n          videoUrl = `https://www.youtube.com/embed/${video.key}`;\n      }\n  }\n\n  // 2. IMAGENS\n  const posterUrl = serie.poster_path \n      ? `https://image.tmdb.org/t/p/w500${serie.poster_path}` \n      : null;\n\n  const backdropUrl = serie.backdrop_path\n      ? `https://image.tmdb.org/t/p/w780${serie.backdrop_path}`\n      : null;\n\n  // 3. TEXTOS\n  const overview = serie.overview || \"Confira os detalhes desta série.\";\n  const frases = overview.split(/[.!?]/).filter(f => f.trim().length > 15);\n  const headline = frases.length > 0 \n    ? frases[0].trim() + '.'\n    : overview.substring(0, 100) + '...';\n\n  const sinopse = overview.length > 300 \n    ? overview.substring(0, 297) + '...'\n    : overview;\n\n  // 4. DADOS BÁSICOS\n  const titulo = serie.name || serie.original_name || \"Título Desconhecido\";\n  const dataBruta = serie.first_air_date || \"\";\n  const ano = dataBruta ? dataBruta.split('-')[0] : \"----\";\n\n  // RETORNO (Mantendo os nomes que o Frontend espera)\n  return {\n    id: serie.id,          // Frontend usa 'id' (não id_original)\n    titulo: titulo,        // Frontend usa 'titulo' (não titulo_pt)\n    headline: headline,\n    sinopse: sinopse,\n    ano: ano,\n    poster: posterUrl,\n    backdrop: backdropUrl,\n    nota: serie.vote_average ? Number(serie.vote_average.toFixed(1)) : 0,\n    video_url: videoUrl,\n    tipo: 'tv'\n  };\n});\n\n// SUA ESTRUTURA DE RETORNO (MANTIDA)\nreturn {\n  json: {\n    status: \"sucesso\",\n    tipo: \"series\",\n    total_series: seriesProcessadas.length,\n    data_atualizacao: $now.toFormat('dd/MM/yyyy HH:mm'),\n    series: seriesProcessadas // A lista vai aqui dentro\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1104,
+        -80
+      ],
+      "id": "95c9f8a8-d6bf-4b04-a9af-176cc96c2a5a",
+      "name": "Code in JavaScript4"
+    },
+    {
+      "parameters": {
+        "url": "https://api.themoviedb.org/3/search/tv",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "={{ $('Webhook').item.json.body.search }}"
+            },
+            {
+              "name": "language",
+              "value": "pt-BR"
+            },
+            {
+              "name": "region",
+              "value": "BR"
+            },
+            {
+              "name": "include_adult",
+              "value": "false"
+            },
+            {
+              "name": "page",
+              "value": "={{ $json.body.page || 1 }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -112,
+        352
+      ],
+      "id": "54e80c6e-093d-43bf-af51-f3b9daaa11ae",
+      "name": "HTTP Request4",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "pGkVDlfdCBPubUGH",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ===== PROCESSADOR UNIVERSAL (FILMES + SÉRIES) =====\nconst items = $input.all();\n\n// Garante que não processamos se estiver vazio\nif (!items.length) return { json: { results: [] } };\n\nconst processados = items.slice(0, 20).map(item => {\n  // Fallback seguro\n  const raw = item.json || {}; \n  \n  // --- 1. DETECÇÃO DE TIPO (Híbrido) ---\n  // Se tem 'name', é TV. Se tem 'title', é Filme.\n  const isTv = raw.name ? true : false;\n  \n  // --- 2. VÍDEO (Lógica de Prioridade) ---\n  let videoUrl = null;\n  const listaVideos = raw.results || (raw.videos ? raw.videos.results : []) || [];\n  \n  if (Array.isArray(listaVideos) && listaVideos.length > 0) {\n    // Tenta achar Trailer Oficial no YouTube\n    const video = listaVideos.find(v => v.type === \"Trailer\" && v.site === \"YouTube\") || \n                  listaVideos.find(v => v.site === \"YouTube\");\n    \n    if (video?.key) {\n      videoUrl = `https://www.youtube.com/embed/${video.key}`;\n    }\n  }\n\n  // --- 3. IMAGENS ---\n  const posterUrl = raw.poster_path \n    ? `https://image.tmdb.org/t/p/w500${raw.poster_path}` \n    : \"https://via.placeholder.com/500x750?text=Sem+Poster\";\n\n  const backdropUrl = raw.backdrop_path\n    ? `https://image.tmdb.org/t/p/w780${raw.backdrop_path}`\n    : null;\n\n  // --- 4. TEXTOS (Normalização) ---\n  const overview = raw.overview || \"Sinopse indisponível.\";\n  const frases = overview.split(/[.!?]/).filter(f => f.trim().length > 15);\n  \n  const headline = frases.length > 0 \n    ? frases[0].trim() + '.'\n    : overview.substring(0, 100) + '...';\n\n  const sinopse = overview.length > 300 \n    ? overview.substring(0, 297) + '...'\n    : overview;\n\n  // --- 5. DADOS HÍBRIDOS (O Pulo do Gato) ---\n  // Normaliza Título (Filme vs Série)\n  const tituloOficial = raw.title || raw.name || raw.original_title || \"Sem Título\";\n  \n  // Normaliza Data (Lançamento vs Primeira Exibição)\n  const dataBruta = raw.release_date || raw.first_air_date || \"\";\n  const ano = dataBruta ? dataBruta.split('-')[0] : \"----\";\n\n  // --- 6. RETORNO DO OBJETO (Formato exato pro React) ---\n  return {\n    id: raw.id,\n    \n    // Nomes compatíveis com seu Frontend:\n    titulo: tituloOficial,      // React lê 'filme.titulo'\n    headline: headline,\n    sinopse: sinopse,\n    \n    ano: ano,\n    data: dataBruta,\n    \n    poster: posterUrl,\n    backdrop: backdropUrl,\n    \n    nota: raw.vote_average ? Number(raw.vote_average.toFixed(1)) : 0.0,\n    video_url: videoUrl,\n    \n    // Campo crucial para as badges no site:\n    tipo: isTv ? 'tv' : 'movie' \n  };\n});\n\n// Recupera metadados se existirem (Opcional)\nconst searchTerm = $('Webhook')?.item?.json?.body?.search || \"\";\n\n// RETORNO FINAL PARA O FRONTEND\nreturn {\n  json: {\n    status: \"sucesso\",\n    termo: searchTerm,\n    total: processados.length,\n    data_atualizacao: $now.toFormat('dd/MM/yyyy HH:mm'),\n    // Entregamos como 'filmes' ou 'results', o React vai ler o array\n    filmes: processados \n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1088,
+        256
+      ],
+      "id": "10451622-6d78-493e-b245-9f47fb6892b2",
+      "name": "Code in JavaScript5"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Recupera o termo de forma segura (aceita 'search' ou 'searchTerm')\n// O uso de ?. (optional chaining) evita erro se o webhook estiver vazio no teste\nconst body = $('Webhook')?.item?.json?.body || {};\nconst termo = body.search || body.searchTerm || \"\";\n\n// Mensagem quando não há resultados\nreturn {\n  json: {\n    status: \"sem_resultados\",\n    termo_pesquisado: termo,\n    mensagem: \"Nenhum resultado encontrado para sua busca.\", // Texto neutro (serve pra série e filme)\n    sugestoes: [\n      \"Verifique a ortografia\",\n      \"Tente usar o título original em inglês\",\n      \"Use termos mais genéricos\",\n      \"Certifique-se de estar na aba correta (Filmes ou Séries)\" // Dica nova importante!\n    ],\n    total_encontrado: 0,\n    data_pesquisa: $now.toFormat('dd/MM/yyyy HH:mm'),\n    \n    // MANTENHA ISSO! É o que salva seu Frontend da Tela Preta.\n    // O React vai receber uma lista vazia e mostrar a mensagem de \"Nenhum conteúdo\" que criamos.\n    filmes: [] \n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        352,
+        512
+      ],
+      "id": "587d7634-9b11-45ff-9d1b-d777b6ce402f",
+      "name": "Code in JavaScript6"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "996f5b0d-cc7b-4f9b-ab1b-5ac68082359f",
+              "leftValue": "={{ $json.results }}",
+              "rightValue": "",
+              "operator": {
+                "type": "array",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "1a6e0131-d644-496e-8578-fa391563261b",
+              "leftValue": "={{ $json.total_results }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        96,
+        352
+      ],
+      "id": "aa904903-31b4-4e62-96c5-a9b7fa35a7cf",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "results",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        560,
+        240
+      ],
+      "id": "75fdc656-17ab-4c14-ac09-e1ab34ab99a7",
+      "name": "Split Out3"
+    },
+    {
+      "parameters": {
+        "url": "=https://api.themoviedb.org/3/tv/{{ $json.id }}/videos",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        736,
+        368
+      ],
+      "id": "40cd9694-558a-47d3-a856-84890092702a",
+      "name": "HTTP Request5",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "pGkVDlfdCBPubUGH",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Content-type",
+                "value": "Application/json"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1328,
+        512
+      ],
+      "id": "cbdbf719-c238-4539-83ca-1578d8d3b153",
+      "name": "Respond to Webhook3"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. Pega os dados\nconst item = $input.first();\nconst json = item.json;\n\n// 2. Pega a lista original ou vazia\nconst todosItens = json.results || [];\n\n// 3. Corta para apenas 20 itens e normaliza os nomes\nconst top20Itens = todosItens.slice(0, 20).map(item => {\n    \n    // DETECÇÃO AUTOMÁTICA: Filme ou Série?\n    // Se tiver 'name', é série. Se não, assumimos filme.\n    const isSerie = item.name ? true : false;\n\n    return {\n      id: item.id,\n      \n      // BLINDAGEM DE TÍTULO (Pega title OU name)\n      title: item.title || item.name || item.original_title || \"Sem Título\",\n      original_title: item.original_title || item.original_name,\n      \n      overview: item.overview,\n      \n      // BLINDAGEM DE DATA (Pega release_date OU first_air_date)\n      release_date: item.release_date || item.first_air_date,\n      \n      poster_path: item.poster_path,\n      backdrop_path: item.backdrop_path,\n      vote_average: item.vote_average,\n      popularity: item.popularity,\n      \n      // CAMPO EXTRA IMPORTANTE PRO FRONTEND\n      tipo: isSerie ? 'tv' : 'movie'\n    };\n});\n\n// 4. RETORNA UM ÚNICO ITEM com o campo \"results\"\n// Mantive sua estrutura para o \"Split Out\" funcionar!\nreturn {\n  json: {\n    results: top20Itens\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        352,
+        240
+      ],
+      "id": "96c4ed38-bcd9-4df9-a070-a4c57ddd9fc7",
+      "name": "Code in JavaScript7"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        912,
+        256
+      ],
+      "id": "160072ad-fc17-4a43-a245-497291b35953",
+      "name": "Merge3"
+    },
+    {
+      "parameters": {
+        "url": "https://api.themoviedb.org/3/discover/movie",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "language",
+              "value": "pt-BR"
+            },
+            {
+              "name": "sort_by",
+              "value": "popularity.desc"
+            },
+            {
+              "name": "with_genres",
+              "value": "={{ $('Webhook').item.json.body.genre_id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -160,
+        832
+      ],
+      "id": "d024eec7-7589-4cf6-bcc0-2b6244a6ed58",
+      "name": "HTTP Request6",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "pGkVDlfdCBPubUGH",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "results",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        48,
+        832
+      ],
+      "id": "a75281be-a3bf-4a60-9f9b-8578387f7dd1",
+      "name": "Split Out4"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        544,
+        848
+      ],
+      "id": "e2270617-56c0-4c67-9336-7fc451dad295",
+      "name": "Merge4"
+    },
+    {
+      "parameters": {
+        "url": "=https://api.themoviedb.org/3/movie/{{ $json.id }}/videos",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        304,
+        944
+      ],
+      "id": "8ccd0b87-2300-497b-9f41-d36939d070f5",
+      "name": "busca id para video2",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "pGkVDlfdCBPubUGH",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ===== PROCESSADOR DE FILMES COM VÍDEOS - VERSÃO CORRIGIDA =====\n\n// 1. Pega todos os items recebidos\nconst items = $input.all();\n\nif (!items || items.length === 0) {\n  return [{\n    json: {\n      status: \"erro\",\n      mensagem: \"Nenhum dado recebido\",\n      filmes: []\n    }\n  }];\n}\n\n// 2. Verifica se o primeiro item tem a estrutura esperada\nconst primeiroItem = items[0].json;\n\n// 3. Separa os dados de filmes dos dados de vídeos\nconst dadosFilmes = [];\nconst dadosVideos = {};\n\n// Processa cada item\nitems.forEach(item => {\n  const json = item.json;\n  \n  // Se o item tem \"results\" e é um array de vídeos\n  if (json.id && json.results && Array.isArray(json.results)) {\n    // Este é um objeto de vídeos\n    dadosVideos[json.id] = json.results;\n  } \n  // Se o item tem dados de filme\n  else if (json.title || json.name) {\n    dadosFilmes.push(json);\n  }\n});\n\nconsole.log('Total de filmes:', dadosFilmes.length);\nconsole.log('Total de vídeos mapeados:', Object.keys(dadosVideos).length);\n\n// 4. Processa os filmes limitando a 10\nconst filmesProcessados = dadosFilmes.slice(0, 10).map(filme => {\n  \n  // 1. BUSCA O VÍDEO DO FILME\n  let videoUrl = null;\n  const videosDoFilme = dadosVideos[filme.id] || [];\n  \n  console.log(`Filme ${filme.id}: ${videosDoFilme.length} vídeos encontrados`);\n  \n  if (videosDoFilme.length > 0) {\n    // Procura por Trailer oficial no YouTube\n    const video = videosDoFilme.find(v => \n      v.type === \"Trailer\" && \n      v.site === \"YouTube\" && \n      v.official === true\n    ) || videosDoFilme.find(v => \n      v.site === \"YouTube\"\n    );\n    \n    if (video?.key) {\n      videoUrl = `https://www.youtube.com/embed/${video.key}`;\n      console.log(`✓ Vídeo encontrado para ${filme.title}: ${video.key}`);\n    }\n  }\n\n  // 2. IMAGENS\n  const posterUrl = filme.poster_path \n    ? `https://image.tmdb.org/t/p/w500${filme.poster_path}` \n    : null;\n\n  const backdropUrl = filme.backdrop_path\n    ? `https://image.tmdb.org/t/p/w780${filme.backdrop_path}`\n    : null;\n\n  // 3. TEXTOS\n  const overview = filme.overview || \"Sinopse indisponível.\";\n  const frases = overview.split(/[.!?]/).filter(f => f.trim().length > 15);\n  \n  const headline = frases.length > 0 \n    ? frases[0].trim() + '.'\n    : overview.substring(0, 100) + '...';\n\n  const sinopse = overview.length > 300 \n    ? overview.substring(0, 297) + '...'\n    : overview;\n\n  // 4. RETORNO DO OBJETO\n  return {\n    id_original: filme.id,\n    titulo_pt: filme.title || filme.name || \"Título Desconhecido\",\n    titulo_original: filme.original_title || filme.original_name,\n    headline: headline,\n    sinopse: sinopse,\n    ano: filme.release_date ? filme.release_date.split('-')[0] : \"----\",\n    data_lancamento: filme.release_date || filme.first_air_date || null,\n    poster: posterUrl,\n    backdrop: backdropUrl,\n    nota: filme.vote_average ? Number(filme.vote_average.toFixed(1)) : 0.0,\n    total_votos: filme.vote_count || 0,\n    popularidade: filme.popularity || 0,\n    video_url: videoUrl,\n    idioma_original: filme.original_language || \"en\"\n  };\n});\n\n// 5. RETORNA NO FORMATO CORRETO DO N8N\nreturn [{\n  json: {\n    status: \"sucesso\",\n    total_filmes: filmesProcessados.length,\n    filmes_com_video: filmesProcessados.filter(f => f.video_url).length,\n    data_atualizacao: $now.toFormat('dd/MM/yyyy HH:mm'),\n    filmes: filmesProcessados\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        752,
+        848
+      ],
+      "id": "ab9d0275-2e6e-4a7c-9fb0-8bac8e82c8be",
+      "name": "Code in JavaScript8"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        960,
+        848
+      ],
+      "id": "f8d4b26a-2e1d-4e63-a409-b41ee814c47e",
+      "name": "Respond to Webhook4"
+    },
+    {
+      "parameters": {
+        "url": "https://api.themoviedb.org/3/discover/tv",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "language",
+              "value": "pt-BR"
+            },
+            {
+              "name": "sort_by",
+              "value": "popularity.desc"
+            },
+            {
+              "name": "with_genres",
+              "value": "={{ $('Webhook').item.json.body.genre_id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -224,
+        1248
+      ],
+      "id": "199e74af-3164-4a23-b17f-05bba7a2c75d",
+      "name": "HTTP Request7",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "pGkVDlfdCBPubUGH",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "results",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        -16,
+        1248
+      ],
+      "id": "50b99f63-d4e6-45b2-95bf-f78fb8405582",
+      "name": "Split Out5"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        480,
+        1264
+      ],
+      "id": "0be6e55d-880d-4b22-a64b-e577d2cc98ee",
+      "name": "Merge5"
+    },
+    {
+      "parameters": {
+        "url": "=https://api.themoviedb.org/3/tv/{{ $json.id }}/videos",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        240,
+        1360
+      ],
+      "id": "6548058a-acce-4e3e-8b36-06ea9cf07be7",
+      "name": "busca id para video3",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "pGkVDlfdCBPubUGH",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ===== PROCESSADOR DE SÉRIES POR CATEGORIA - VERSÃO CORRIGIDA =====\n\n// 1. Pega todos os items recebidos do Merge\nconst items = $input.all();\n\nif (!items || items.length === 0) {\n  return [{\n    json: {\n      status: \"erro\",\n      mensagem: \"Nenhum dado recebido\",\n      series: []\n    }\n  }];\n}\n\nconsole.log('📊 Total de items recebidos:', items.length);\n\n// 2. Separa séries de vídeos\nconst dadosSeries = [];\nconst dadosVideos = {};\n\nitems.forEach(item => {\n  const json = item.json;\n  \n  // Se tem 'results' e 'id', é um objeto de vídeos\n  if (json.id && json.results && Array.isArray(json.results)) {\n    dadosVideos[json.id] = json.results;\n    console.log(`🎬 Vídeos mapeados para série ID ${json.id}: ${json.results.length} vídeos`);\n  }\n  // Se tem 'name' (séries usam 'name' ao invés de 'title'), é uma série\n  else if (json.name || json.original_name) {\n    dadosSeries.push(json);\n  }\n});\n\nconsole.log('📺 Total de séries encontradas:', dadosSeries.length);\nconsole.log('🎥 Total de IDs com vídeos:', Object.keys(dadosVideos).length);\n\n// 3. Processa as séries\nconst seriesProcessadas = dadosSeries.map(serie => {\n  \n  // 1. BUSCA VÍDEOS DA SÉRIE\n  let videoUrl = null;\n  const videosDaSerie = dadosVideos[serie.id] || [];\n  \n  console.log(`🔍 Série \"${serie.name}\" (ID: ${serie.id}): ${videosDaSerie.length} vídeos`);\n  \n  if (videosDaSerie.length > 0) {\n    // Prioridade: Trailer oficial do YouTube\n    const video = videosDaSerie.find(v => \n      v.type === \"Trailer\" && \n      v.site === \"YouTube\" && \n      v.official === true\n    ) || videosDaSerie.find(v => \n      v.site === \"YouTube\" && \n      v.type === \"Trailer\"\n    ) || videosDaSerie.find(v => \n      v.site === \"YouTube\"\n    );\n    \n    if (video?.key) {\n      videoUrl = `https://www.youtube.com/embed/${video.key}`;\n      console.log(`✅ Vídeo encontrado: ${video.name}`);\n    }\n  }\n\n  // 2. IMAGENS\n  const posterUrl = serie.poster_path \n    ? `https://image.tmdb.org/t/p/w500${serie.poster_path}` \n    : null;\n\n  const backdropUrl = serie.backdrop_path\n    ? `https://image.tmdb.org/t/p/original${serie.backdrop_path}`\n    : null;\n\n  // 3. TEXTOS\n  const overview = serie.overview || \"Sinopse indisponível.\";\n  const frases = overview.split(/[.!?]/).filter(f => f.trim().length > 15);\n  \n  const headline = frases.length > 0 \n    ? frases[0].trim() + '.'\n    : overview.substring(0, 100) + '...';\n\n  const sinopse = overview.length > 300 \n    ? overview.substring(0, 297) + '...'\n    : overview;\n\n  // 4. DATA\n  const dataBruta = serie.first_air_date || \"\";\n  const ano = dataBruta ? dataBruta.split('-')[0] : \"----\";\n\n  // 5. RETORNO (formato compatível com frontend)\n  return {\n    id: serie.id,\n    titulo: serie.name || serie.original_name || \"Título Desconhecido\",\n    titulo_original: serie.original_name,\n    headline: headline,\n    sinopse: sinopse,\n    ano: ano,\n    data_lancamento: serie.first_air_date || null,\n    poster: posterUrl,\n    backdrop: backdropUrl,\n    nota: serie.vote_average ? Number(serie.vote_average.toFixed(1)) : 0.0,\n    total_votos: serie.vote_count || 0,\n    popularidade: serie.popularity || 0,\n    video_url: videoUrl,\n    tipo: 'tv',\n    idioma_original: serie.original_language || \"en\"\n  };\n});\n\nconsole.log(`✨ ${seriesProcessadas.length} séries processadas`);\nconsole.log(`🎬 ${seriesProcessadas.filter(s => s.video_url).length} séries com vídeo`);\n\n// 6. RETORNA NO FORMATO CORRETO\nreturn [{\n  json: {\n    status: \"sucesso\",\n    tipo: \"series\",\n    total_series: seriesProcessadas.length,\n    series_com_video: seriesProcessadas.filter(s => s.video_url).length,\n    data_atualizacao: $now.toFormat('dd/MM/yyyy HH:mm'),\n    series: seriesProcessadas\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        688,
+        1264
+      ],
+      "id": "9bec9098-7471-47ad-ae7d-ba4bf05de0e7",
+      "name": "Code in JavaScript9"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        896,
+        1264
+      ],
+      "id": "6fa0bdad-c496-40e4-b6c3-9b3af0cc7902",
+      "name": "Respond to Webhook5"
+    }
+  ],
+  "connections": {
+    "HTTP Request1": {
+      "main": [
+        [
+          {
+            "node": "Split Out",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "busca id para video": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out": {
+      "main": [
+        [
+          {
+            "node": "busca id para video",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript2": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript3",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out1": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request2",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request2": {
+      "main": [
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript3": {
+      "main": [
+        [
+          {
+            "node": "Split Out1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge1": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP Request3",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP Request4",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP Request6",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP Request7",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request3": {
+      "main": [
+        [
+          {
+            "node": "Split Out2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge2": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "busca id para video1": {
+      "main": [
+        [
+          {
+            "node": "Merge2",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Split Out2": {
+      "main": [
+        [
+          {
+            "node": "busca id para video1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript4": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request4": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript5": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript6": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript7",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code in JavaScript6",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out3": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request5",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request5": {
+      "main": [
+        [
+          {
+            "node": "Merge3",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript7": {
+      "main": [
+        [
+          {
+            "node": "Split Out3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge3": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request6": {
+      "main": [
+        [
+          {
+            "node": "Split Out4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out4": {
+      "main": [
+        [
+          {
+            "node": "Merge4",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "busca id para video2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "busca id para video2": {
+      "main": [
+        [
+          {
+            "node": "Merge4",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge4": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript8",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript8": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request7": {
+      "main": [
+        [
+          {
+            "node": "Split Out5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out5": {
+      "main": [
+        [
+          {
+            "node": "Merge5",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "busca id para video3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge5": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript9",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "busca id para video3": {
+      "main": [
+        [
+          {
+            "node": "Merge5",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript9": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true,
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "pinData": {},
+  "versionId": "03da4c2a-dc30-4d68-b85a-1477f4253b8d",
+  "activeVersionId": "03da4c2a-dc30-4d68-b85a-1477f4253b8d",
+  "versionCounter": 896,
+  "triggerCount": 1,
+  "shared": [
+    {
+      "updatedAt": "2026-01-30T16:57:58.213Z",
+      "createdAt": "2026-01-30T16:57:58.213Z",
+      "role": "workflow:owner",
+      "workflowId": "PlRDmPq3DiSdCLmuHoAFc",
+      "projectId": "DmtWN5tZO7Ww8rkx",
+      "project": {
+        "updatedAt": "2026-01-22T03:40:36.046Z",
+        "createdAt": "2026-01-22T03:39:11.086Z",
+        "id": "DmtWN5tZO7Ww8rkx",
+        "name": "yury turatti <limayury587@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "94d3cb17-5370-45a8-88e0-fada9a3f091b",
+        "projectRelations": [
+          {
+            "updatedAt": "2026-01-22T03:39:11.087Z",
+            "createdAt": "2026-01-22T03:39:11.087Z",
+            "userId": "94d3cb17-5370-45a8-88e0-fada9a3f091b",
+            "projectId": "DmtWN5tZO7Ww8rkx",
+            "user": {
+              "updatedAt": "2026-02-10T03:00:53.000Z",
+              "createdAt": "2026-01-22T03:39:10.389Z",
+              "id": "94d3cb17-5370-45a8-88e0-fada9a3f091b",
+              "email": "limayury587@gmail.com",
+              "firstName": "yury",
+              "lastName": "turatti",
+              "personalizationAnswers": {
+                "version": "v4",
+                "personalization_survey_submitted_at": "2026-01-22T03:40:38.946Z",
+                "personalization_survey_n8n_version": "2.4.4"
+              },
+              "settings": {
+                "userActivated": true,
+                "easyAIWorkflowOnboarded": true,
+                "firstSuccessfulWorkflowId": "rC5jtH9HOom2fspeZ9UFN",
+                "userActivatedAt": 1769123454036,
+                "npsSurvey": {
+                  "waitingForResponse": true,
+                  "ignoredCount": 2,
+                  "lastShownAt": 1770208091590
+                }
+              },
+              "disabled": false,
+              "mfaEnabled": false,
+              "lastActiveAt": "2026-02-10",
+              "isPending": false
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "tags": [
+    {
+      "updatedAt": "2026-01-30T20:06:43.527Z",
+      "createdAt": "2026-01-30T20:06:43.527Z",
+      "id": "9yCCZV8UypHfmpvA",
+      "name": "integraçao_lovable"
+    }
+  ],
+  "activeVersion": {
+    "updatedAt": "2026-02-09T11:37:26.000Z",
+    "createdAt": "2026-02-09T11:37:23.357Z",
+    "versionId": "03da4c2a-dc30-4d68-b85a-1477f4253b8d",
+    "workflowId": "PlRDmPq3DiSdCLmuHoAFc",
+    "nodes": [
+      {
+        "parameters": {
+          "url": "https://api.themoviedb.org/3/movie/now_playing?language=pt-BR&region=BR",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.3,
+        "position": [
+          192,
+          -1104
+        ],
+        "id": "e6270750-4213-4c04-a36d-bf361b9cfe99",
+        "name": "HTTP Request1",
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "pGkVDlfdCBPubUGH",
+            "name": "Header Auth account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "lovable",
+          "responseMode": "responseNode",
+          "options": {
+            "responseHeaders": {
+              "entries": [
+                {
+                  "name": "Access-Control-Allow-Origin",
+                  "value": "*"
+                },
+                {
+                  "name": "Content-Type",
+                  "value": "Application/json"
+                }
+              ]
+            }
+          }
+        },
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2.1,
+        "position": [
+          -2512,
+          -16
+        ],
+        "id": "a1586cef-40c6-447f-933d-7650655a2448",
+        "name": "Webhook",
+        "webhookId": "b97bb757-b10f-43b8-b6d5-c0e102279e9e"
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{ $json }}",
+          "options": {
+            "responseHeaders": {
+              "entries": [
+                {
+                  "name": "Access-Control-Allow-Origin",
+                  "value": "*"
+                }
+              ]
+            }
+          }
+        },
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.5,
+        "position": [
+          1120,
+          -1088
+        ],
+        "id": "cb9f08c6-a32a-4c3c-b4a2-f5347f8c454a",
+        "name": "Respond to Webhook"
+      },
+      {
+        "parameters": {
+          "mode": "combine",
+          "combineBy": "combineByPosition",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.merge",
+        "typeVersion": 3.2,
+        "position": [
+          736,
+          -1088
+        ],
+        "id": "84aac72b-81a5-4276-bc8e-cf7325c6f11e",
+        "name": "Merge",
+        "alwaysOutputData": false
+      },
+      {
+        "parameters": {
+          "url": "=https://api.themoviedb.org/3/movie/{{ $json.id }}/videos",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.3,
+        "position": [
+          576,
+          -928
+        ],
+        "id": "492422a3-295b-4d9b-a996-cb7cfe54a0fc",
+        "name": "busca id para video",
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "pGkVDlfdCBPubUGH",
+            "name": "Header Auth account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "fieldToSplitOut": "results",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.splitOut",
+        "typeVersion": 1,
+        "position": [
+          400,
+          -1104
+        ],
+        "id": "4586917d-9294-47a8-875b-1937138ea6b8",
+        "name": "Split Out"
+      },
+      {
+        "parameters": {
+          "jsCode": "// ===== PROCESSADOR ULTRA-RÁPIDO DE FILMES =====\nlet filmes = [];\nconst items = $input.all();\n\n// Normaliza entrada\nif (items.length === 1 && items[0].json.results) {\n    filmes = items[0].json.results;\n} else {\n    filmes = items.map(item => item.json);\n}\n\nconst filmesProcessados = filmes.slice(0, 10).map(filme => {\n  \n  // 1. VÍDEO\n  let videoUrl = null;\n  const listaVideos = filme.results || (filme.videos?.results) || [];\n  \n  if (Array.isArray(listaVideos) && listaVideos.length > 0) {\n      const video = listaVideos.find(v => v.type === \"Trailer\" && v.site === \"YouTube\") || \n                    listaVideos.find(v => v.site === \"YouTube\");\n      \n      if (video?.key && /^[a-zA-Z0-9_-]{11}$/.test(video.key)) {\n          videoUrl = `https://www.youtube.com/embed/${video.key}`;\n      }\n  }\n\n  // 2. IMAGENS\n  const posterUrl = filme.poster_path \n      ? `https://image.tmdb.org/t/p/w500${filme.poster_path}` \n      : null;\n\n  const backdropUrl = filme.backdrop_path\n      ? `https://image.tmdb.org/t/p/w780${filme.backdrop_path}`\n      : null;\n\n  // 3. HEADLINE (primeira frase impactante)\n  const overview = filme.overview || \"Confira os detalhes deste filme.\";\n  const frases = overview.split(/[.!?]/).filter(f => f.trim().length > 15);\n  const headline = frases.length > 0 \n    ? frases[0].trim() + '.'\n    : overview.substring(0, 100) + '...';\n\n  // 4. SINOPSE (limitada)\n  const sinopse = overview.length > 300 \n    ? overview.substring(0, 297) + '...'\n    : overview;\n\n  // 5. TRADUÇÃO BÁSICA DO TÍTULO\n  let tituloPT = filme.title || filme.original_title || \"Título Desconhecido\";\n  \n  // Regras simples de tradução\n  const traducoes = {\n    \"^The \": \"O \",\n    \"^A \": \"Um \",\n    \"^An \": \"Um \"\n  };\n  \n  Object.entries(traducoes).forEach(([en, pt]) => {\n    tituloPT = tituloPT.replace(new RegExp(en, 'i'), pt);\n  });\n\n  return {\n    id_original: filme.id,\n    titulo_pt: tituloPT,\n    headline: headline,\n    sinopse: sinopse,\n    ano: filme.release_date ? filme.release_date.split('-')[0] : \"----\",\n    poster: posterUrl,\n    backdrop: backdropUrl,\n    nota: filme.vote_average ? Number(filme.vote_average.toFixed(1)) : 0,\n    video_url: videoUrl\n  };\n});\n\nreturn {\n  json: {\n    status: \"sucesso\",\n    total_filmes: filmesProcessados.length,\n    data_atualizacao:  $now.toFormat('dd/MM/yyyy HH:mm') ,\n    filmes: filmesProcessados\n  }\n};"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          928,
+          -1088
+        ],
+        "id": "b5f1b416-daac-4075-a071-de499dba16c8",
+        "name": "Code in JavaScript2"
+      },
+      {
+        "parameters": {
+          "url": "https://api.themoviedb.org/3/search/movie",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendQuery": true,
+          "queryParameters": {
+            "parameters": [
+              {
+                "name": "query",
+                "value": "={{ $json.body.search }}"
+              },
+              {
+                "name": "language",
+                "value": "pt-BR"
+              },
+              {
+                "name": "region",
+                "value": "BR"
+              },
+              {
+                "name": "include_adult",
+                "value": "false"
+              },
+              {
+                "name": "page",
+                "value": "={{ $json.body.page || 1 }}"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.3,
+        "position": [
+          48,
+          -544
+        ],
+        "id": "5e280867-3927-4203-87ce-f6806d54c466",
+        "name": "HTTP Request",
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "pGkVDlfdCBPubUGH",
+            "name": "Header Auth account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "// ===== PROCESSADOR DE FILMES - OTIMIZADO =====\nconst items = $input.all();\n\n// Garante que não processamos mais que 10 e evita erros se input for vazio\nif (!items.length) return { json: {} };\n\nconst filmesProcessados = items.slice(0, 10).map(item => {\n  // Garante acesso ao JSON, com fallback para objeto vazio\n  const filme = item.json || {}; \n  \n  // 1. VÍDEO (Lógica de Prioridade: Trailer YouTube > Qualquer YouTube)\n  let videoUrl = null;\n  // Fallback seguro caso 'results' venha undefined ou dentro de 'videos'\n  const listaVideos = filme.results || (filme.videos ? filme.videos.results : []) || [];\n  \n  if (Array.isArray(listaVideos) && listaVideos.length > 0) {\n    const video = listaVideos.find(v => v.type === \"Trailer\" && v.site === \"YouTube\") || \n                  listaVideos.find(v => v.site === \"YouTube\");\n    \n    if (video?.key) {\n      videoUrl = `https://www.youtube.com/embed/${video.key}`;\n    }\n  }\n\n  // 2. IMAGENS (Tratamento para null/undefined)\n  const posterUrl = filme.poster_path \n    ? `https://image.tmdb.org/t/p/w500${filme.poster_path}` \n    : \"https://via.placeholder.com/500x750?text=Sem+Poster\"; // Fallback opcional\n\n  const backdropUrl = filme.backdrop_path\n    ? `https://image.tmdb.org/t/p/w780${filme.backdrop_path}`\n    : null;\n\n  // 3. TEXTOS (Headline e Sinopse)\n  const overview = filme.overview || \"Sinopse indisponível.\";\n  // Divide por pontuação, remove espaços vazios e filtra frases muito curtas\n  const frases = overview.split(/[.!?]/).filter(f => f.trim().length > 15);\n  \n  const headline = frases.length > 0 \n    ? frases[0].trim() + '.'\n    : overview.substring(0, 100) + '...';\n\n  const sinopse = overview.length > 300 \n    ? overview.substring(0, 297) + '...'\n    : overview;\n\n  // 4. RETORNO DO OBJETO FORMATADO\n  return {\n    id_original: filme.id,\n    titulo_pt: filme.title || filme.original_title || \"Título Desconhecido\",\n    titulo_original: filme.original_title,\n    headline: headline,\n    sinopse: sinopse,\n    ano: filme.release_date ? filme.release_date.split('-')[0] : \"----\",\n    data_lancamento: filme.release_date || null,\n    poster: posterUrl,\n    backdrop: backdropUrl,\n    nota: filme.vote_average ? Number(filme.vote_average.toFixed(1)) : 0.0,\n    total_votos: filme.vote_count || 0,\n    popularidade: filme.popularity || 0,\n    video_url: videoUrl,\n    idioma_original: filme.original_language || \"en\"\n  };\n});\n\n// Acessa dados globais do webhook (meta-dados da requisição)\n// Nota: Use o Try/Catch ou Optional Chaining se houver risco do webhook não existir no teste manual\nconst searchTerm = $('Webhook')?.item?.json?.body?.searchTerm || \"Termo Teste\";\nconst page = $('Webhook')?.item?.json?.body?.page || 1;\n\nreturn {\n  json: {\n    status: \"sucesso\",\n    termo_pesquisado: searchTerm,\n    total_filmes: filmesProcessados.length,\n    pagina_atual: page,\n    data_pesquisa: $now.toFormat('dd/MM/yyyy HH:mm'),\n    filmes: filmesProcessados\n  }\n};"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1248,
+          -640
+        ],
+        "id": "a61f7c7e-b367-428c-aca0-a8e8002787c5",
+        "name": "Code in JavaScript"
+      },
+      {
+        "parameters": {
+          "jsCode": "// Mensagem quando não há resultados\nreturn {\n  json: {\n    status: \"sem_resultados\",\n    termo_pesquisado: $('Webhook').item.json.body.searchTerm,\n    mensagem: \"Nenhum filme encontrado com este termo de busca.\",\n    sugestoes: [\n      \"Verifique a ortografia\",\n      \"Tente usar o título original em inglês\",\n      \"Use termos mais genéricos\",\n      \"Tente pesquisar por palavras-chave do filme\"\n    ],\n    total_filmes: 0,\n    data_pesquisa: $now.toFormat('dd/MM/yyyy HH:mm'),\n    filmes: []\n  }\n};"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          512,
+          -384
+        ],
+        "id": "05a3f20c-4f05-43b5-87b2-fe6c7470ea83",
+        "name": "Code in JavaScript1"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 3
+            },
+            "conditions": [
+              {
+                "id": "996f5b0d-cc7b-4f9b-ab1b-5ac68082359f",
+                "leftValue": "={{ $json.results }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "array",
+                  "operation": "notEmpty",
+                  "singleValue": true
+                }
+              },
+              {
+                "id": "1a6e0131-d644-496e-8578-fa391563261b",
+                "leftValue": "={{ $json.total_results }}",
+                "rightValue": 0,
+                "operator": {
+                  "type": "number",
+                  "operation": "notEquals"
+                }
+              }
+            ],
+            "combinator": "or"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          256,
+          -544
+        ],
+        "id": "534fecce-ad39-45a3-b28e-bcdce79cef5a",
+        "name": "If1"
+      },
+      {
+        "parameters": {
+          "fieldToSplitOut": "results",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.splitOut",
+        "typeVersion": 1,
+        "position": [
+          720,
+          -656
+        ],
+        "id": "32969c92-8480-4105-8a1f-db1779d56ad5",
+        "name": "Split Out1"
+      },
+      {
+        "parameters": {
+          "url": "=https://api.themoviedb.org/3/movie/{{ $json.id }}/videos",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.3,
+        "position": [
+          896,
+          -528
+        ],
+        "id": "8863c873-7225-4105-a6be-d95a9ce0813e",
+        "name": "HTTP Request2",
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "pGkVDlfdCBPubUGH",
+            "name": "Header Auth account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "options": {
+            "responseHeaders": {
+              "entries": [
+                {
+                  "name": "Access-Control-Allow-Origin",
+                  "value": "*"
+                },
+                {
+                  "name": "Content-type",
+                  "value": "Application/json"
+                }
+              ]
+            }
+          }
+        },
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.5,
+        "position": [
+          1488,
+          -384
+        ],
+        "id": "d69b3565-ebce-4a00-8146-7e90658357e6",
+        "name": "Respond to Webhook1"
+      },
+      {
+        "parameters": {
+          "jsCode": "// 1. Pega os dados\nconst item = $input.first();\nconst json = item.json;\n\n// 2. Pega a lista original ou vazia\nconst todosFilmes = json.results || [];\n\n// 3. Corta para apenas 10 filmes\nconst top10Filmes = todosFilmes.slice(0, 20).map(filme => {\n    // Limpa os dados de cada filme\n    return {\n      id: filme.id,\n      title: filme.title || filme.original_title,\n      original_title: filme.original_title,\n      overview: filme.overview,\n      release_date: filme.release_date,\n      poster_path: filme.poster_path,\n      backdrop_path: filme.backdrop_path,\n      vote_average: filme.vote_average,\n      popularity: filme.popularity\n    };\n});\n\n// 4. RETORNA UM ÚNICO ITEM com o campo \"results\"\n// Assim o seu node \"Split Out\" vai conseguir ler!\nreturn {\n  json: {\n    results: top10Filmes\n  }\n};"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          512,
+          -656
+        ],
+        "id": "47165afc-be4a-493c-ad29-022bd3a9ff3c",
+        "name": "Code in JavaScript3"
+      },
+      {
+        "parameters": {
+          "mode": "combine",
+          "combineBy": "combineByPosition",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.merge",
+        "typeVersion": 3.2,
+        "position": [
+          1072,
+          -640
+        ],
+        "id": "291aa7fd-5602-4d59-9479-f2ebdef98778",
+        "name": "Merge1"
+      },
+      {
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "3e79d36f-83ec-45d1-9ca3-a3d675358af3",
+                "name": "rota",
+                "value": "={{ \n$json.body.type == 'category_filmes' ? 'category_filmes' : \n$json.body.type == 'category_serie' ? 'category_serie' : \n$json.body.type == 'tv' ? ($json.body.search ? 'pesquisa_series' : 'home_series') : \n($json.body.search ? 'pesquisa' : 'home') \n}}",
+                "type": "string"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          -2288,
+          -16
+        ],
+        "id": "8865269e-4bdb-4fd7-b661-f137f6018018",
+        "name": "Edit Fields"
+      },
+      {
+        "parameters": {
+          "rules": {
+            "values": [
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "leftValue": "",
+                    "typeValidation": "strict",
+                    "version": 3
+                  },
+                  "conditions": [
+                    {
+                      "leftValue": "={{ $json.rota }}",
+                      "rightValue": "home",
+                      "operator": {
+                        "type": "string",
+                        "operation": "equals"
+                      },
+                      "id": "df570eda-59af-4974-9eb7-7d217c5911a4"
+                    }
+                  ],
+                  "combinator": "and"
+                },
+                "renameOutput": true,
+                "outputKey": "home"
+              },
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "leftValue": "",
+                    "typeValidation": "strict",
+                    "version": 3
+                  },
+                  "conditions": [
+                    {
+                      "id": "214bba5a-8501-46b9-9235-f69ef278270d",
+                      "leftValue": "={{ $json.rota }}",
+                      "rightValue": "pesquisa",
+                      "operator": {
+                        "type": "string",
+                        "operation": "equals",
+                        "name": "filter.operator.equals"
+                      }
+                    }
+                  ],
+                  "combinator": "and"
+                },
+                "renameOutput": true,
+                "outputKey": "pesquisa"
+              },
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "leftValue": "",
+                    "typeValidation": "strict",
+                    "version": 3
+                  },
+                  "conditions": [
+                    {
+                      "id": "c5eba0f1-0bcc-4b45-9fef-37548811d855",
+                      "leftValue": "={{ $json.rota }}",
+                      "rightValue": "home_series",
+                      "operator": {
+                        "type": "string",
+                        "operation": "equals",
+                        "name": "filter.operator.equals"
+                      }
+                    }
+                  ],
+                  "combinator": "and"
+                },
+                "renameOutput": true,
+                "outputKey": "home_series"
+              },
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "leftValue": "",
+                    "typeValidation": "strict",
+                    "version": 3
+                  },
+                  "conditions": [
+                    {
+                      "id": "b2337961-94f8-4d45-8b4f-cdad8cb3c0ff",
+                      "leftValue": "={{ $json.rota }}",
+                      "rightValue": "pesquisa_series",
+                      "operator": {
+                        "type": "string",
+                        "operation": "equals",
+                        "name": "filter.operator.equals"
+                      }
+                    }
+                  ],
+                  "combinator": "and"
+                },
+                "renameOutput": true,
+                "outputKey": "pesquisa_series"
+              },
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "leftValue": "",
+                    "typeValidation": "strict",
+                    "version": 3
+                  },
+                  "conditions": [
+                    {
+                      "id": "d36c92a0-3ed5-4a65-bbe4-28201a2f6d5c",
+                      "leftValue": "={{ $json.rota }}",
+                      "rightValue": "category_filmes",
+                      "operator": {
+                        "type": "string",
+                        "operation": "equals",
+                        "name": "filter.operator.equals"
+                      }
+                    }
+                  ],
+                  "combinator": "and"
+                },
+                "renameOutput": true,
+                "outputKey": "categoria_filmes"
+              },
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "leftValue": "",
+                    "typeValidation": "strict",
+                    "version": 3
+                  },
+                  "conditions": [
+                    {
+                      "id": "f628b80b-f33f-4ea6-be7a-b16cef5b7479",
+                      "leftValue": "={{ $json.rota }}",
+                      "rightValue": "category_serie",
+                      "operator": {
+                        "type": "string",
+                        "operation": "equals",
+                        "name": "filter.operator.equals"
+                      }
+                    }
+                  ],
+                  "combinator": "and"
+                },
+                "renameOutput": true,
+                "outputKey": "categoria_serie"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.switch",
+        "typeVersion": 3.4,
+        "position": [
+          -2048,
+          -80
+        ],
+        "id": "acb4846f-9c28-4c99-a0a3-cd0213425e85",
+        "name": "Switch"
+      },
+      {
+        "parameters": {
+          "url": "https://api.themoviedb.org/3/tv/popular?language=pt-BR",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.3,
+        "position": [
+          368,
+          -96
+        ],
+        "id": "d77f0a2b-3c8f-4d78-9685-fc1c9489b9a3",
+        "name": "HTTP Request3",
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "pGkVDlfdCBPubUGH",
+            "name": "Header Auth account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{ $json }}",
+          "options": {
+            "responseHeaders": {
+              "entries": [
+                {
+                  "name": "Access-Control-Allow-Origin",
+                  "value": "*"
+                }
+              ]
+            }
+          }
+        },
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.5,
+        "position": [
+          1296,
+          -80
+        ],
+        "id": "db48cce8-0f14-415c-b790-e71023cf1662",
+        "name": "Respond to Webhook2"
+      },
+      {
+        "parameters": {
+          "mode": "combine",
+          "combineBy": "combineByPosition",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.merge",
+        "typeVersion": 3.2,
+        "position": [
+          912,
+          -80
+        ],
+        "id": "9e1b9672-559b-46c2-af84-80aeef82f7e3",
+        "name": "Merge2",
+        "alwaysOutputData": false
+      },
+      {
+        "parameters": {
+          "url": "=https://api.themoviedb.org/3/tv/{{ $json.id }}/videos",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.3,
+        "position": [
+          752,
+          80
+        ],
+        "id": "d96e3901-8727-4695-ac62-9096e0e3ca1b",
+        "name": "busca id para video1",
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "pGkVDlfdCBPubUGH",
+            "name": "Header Auth account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "fieldToSplitOut": "results",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.splitOut",
+        "typeVersion": 1,
+        "position": [
+          576,
+          -96
+        ],
+        "id": "ff05ddda-4c87-451f-a3f5-c3f9ef907710",
+        "name": "Split Out2"
+      },
+      {
+        "parameters": {
+          "jsCode": "// ===== PROCESSADOR DE SÉRIES (SUA VERSÃO AJUSTADA) =====\nlet series = [];\nconst items = $input.all();\n\n// 1. Normaliza entrada\nif (items.length === 1 && items[0].json.results) {\n    series = items[0].json.results;\n} else {\n    series = items.map(item => item.json);\n}\n\nconst seriesProcessadas = series.slice(0, 20).map(serie => {\n  \n  // 1. VÍDEO\n  let videoUrl = null;\n  const listaVideos = serie.results || (serie.videos?.results) || [];\n  \n  if (Array.isArray(listaVideos) && listaVideos.length > 0) {\n      const video = listaVideos.find(v => v.type === \"Trailer\" && v.site === \"YouTube\") || \n                    listaVideos.find(v => v.site === \"YouTube\");\n      \n      if (video?.key) {\n          videoUrl = `https://www.youtube.com/embed/${video.key}`;\n      }\n  }\n\n  // 2. IMAGENS\n  const posterUrl = serie.poster_path \n      ? `https://image.tmdb.org/t/p/w500${serie.poster_path}` \n      : null;\n\n  const backdropUrl = serie.backdrop_path\n      ? `https://image.tmdb.org/t/p/w780${serie.backdrop_path}`\n      : null;\n\n  // 3. TEXTOS\n  const overview = serie.overview || \"Confira os detalhes desta série.\";\n  const frases = overview.split(/[.!?]/).filter(f => f.trim().length > 15);\n  const headline = frases.length > 0 \n    ? frases[0].trim() + '.'\n    : overview.substring(0, 100) + '...';\n\n  const sinopse = overview.length > 300 \n    ? overview.substring(0, 297) + '...'\n    : overview;\n\n  // 4. DADOS BÁSICOS\n  const titulo = serie.name || serie.original_name || \"Título Desconhecido\";\n  const dataBruta = serie.first_air_date || \"\";\n  const ano = dataBruta ? dataBruta.split('-')[0] : \"----\";\n\n  // RETORNO (Mantendo os nomes que o Frontend espera)\n  return {\n    id: serie.id,          // Frontend usa 'id' (não id_original)\n    titulo: titulo,        // Frontend usa 'titulo' (não titulo_pt)\n    headline: headline,\n    sinopse: sinopse,\n    ano: ano,\n    poster: posterUrl,\n    backdrop: backdropUrl,\n    nota: serie.vote_average ? Number(serie.vote_average.toFixed(1)) : 0,\n    video_url: videoUrl,\n    tipo: 'tv'\n  };\n});\n\n// SUA ESTRUTURA DE RETORNO (MANTIDA)\nreturn {\n  json: {\n    status: \"sucesso\",\n    tipo: \"series\",\n    total_series: seriesProcessadas.length,\n    data_atualizacao: $now.toFormat('dd/MM/yyyy HH:mm'),\n    series: seriesProcessadas // A lista vai aqui dentro\n  }\n};"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1104,
+          -80
+        ],
+        "id": "95c9f8a8-d6bf-4b04-a9af-176cc96c2a5a",
+        "name": "Code in JavaScript4"
+      },
+      {
+        "parameters": {
+          "url": "https://api.themoviedb.org/3/search/tv",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendQuery": true,
+          "queryParameters": {
+            "parameters": [
+              {
+                "name": "query",
+                "value": "={{ $('Webhook').item.json.body.search }}"
+              },
+              {
+                "name": "language",
+                "value": "pt-BR"
+              },
+              {
+                "name": "region",
+                "value": "BR"
+              },
+              {
+                "name": "include_adult",
+                "value": "false"
+              },
+              {
+                "name": "page",
+                "value": "={{ $json.body.page || 1 }}"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.3,
+        "position": [
+          -112,
+          352
+        ],
+        "id": "54e80c6e-093d-43bf-af51-f3b9daaa11ae",
+        "name": "HTTP Request4",
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "pGkVDlfdCBPubUGH",
+            "name": "Header Auth account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "// ===== PROCESSADOR UNIVERSAL (FILMES + SÉRIES) =====\nconst items = $input.all();\n\n// Garante que não processamos se estiver vazio\nif (!items.length) return { json: { results: [] } };\n\nconst processados = items.slice(0, 20).map(item => {\n  // Fallback seguro\n  const raw = item.json || {}; \n  \n  // --- 1. DETECÇÃO DE TIPO (Híbrido) ---\n  // Se tem 'name', é TV. Se tem 'title', é Filme.\n  const isTv = raw.name ? true : false;\n  \n  // --- 2. VÍDEO (Lógica de Prioridade) ---\n  let videoUrl = null;\n  const listaVideos = raw.results || (raw.videos ? raw.videos.results : []) || [];\n  \n  if (Array.isArray(listaVideos) && listaVideos.length > 0) {\n    // Tenta achar Trailer Oficial no YouTube\n    const video = listaVideos.find(v => v.type === \"Trailer\" && v.site === \"YouTube\") || \n                  listaVideos.find(v => v.site === \"YouTube\");\n    \n    if (video?.key) {\n      videoUrl = `https://www.youtube.com/embed/${video.key}`;\n    }\n  }\n\n  // --- 3. IMAGENS ---\n  const posterUrl = raw.poster_path \n    ? `https://image.tmdb.org/t/p/w500${raw.poster_path}` \n    : \"https://via.placeholder.com/500x750?text=Sem+Poster\";\n\n  const backdropUrl = raw.backdrop_path\n    ? `https://image.tmdb.org/t/p/w780${raw.backdrop_path}`\n    : null;\n\n  // --- 4. TEXTOS (Normalização) ---\n  const overview = raw.overview || \"Sinopse indisponível.\";\n  const frases = overview.split(/[.!?]/).filter(f => f.trim().length > 15);\n  \n  const headline = frases.length > 0 \n    ? frases[0].trim() + '.'\n    : overview.substring(0, 100) + '...';\n\n  const sinopse = overview.length > 300 \n    ? overview.substring(0, 297) + '...'\n    : overview;\n\n  // --- 5. DADOS HÍBRIDOS (O Pulo do Gato) ---\n  // Normaliza Título (Filme vs Série)\n  const tituloOficial = raw.title || raw.name || raw.original_title || \"Sem Título\";\n  \n  // Normaliza Data (Lançamento vs Primeira Exibição)\n  const dataBruta = raw.release_date || raw.first_air_date || \"\";\n  const ano = dataBruta ? dataBruta.split('-')[0] : \"----\";\n\n  // --- 6. RETORNO DO OBJETO (Formato exato pro React) ---\n  return {\n    id: raw.id,\n    \n    // Nomes compatíveis com seu Frontend:\n    titulo: tituloOficial,      // React lê 'filme.titulo'\n    headline: headline,\n    sinopse: sinopse,\n    \n    ano: ano,\n    data: dataBruta,\n    \n    poster: posterUrl,\n    backdrop: backdropUrl,\n    \n    nota: raw.vote_average ? Number(raw.vote_average.toFixed(1)) : 0.0,\n    video_url: videoUrl,\n    \n    // Campo crucial para as badges no site:\n    tipo: isTv ? 'tv' : 'movie' \n  };\n});\n\n// Recupera metadados se existirem (Opcional)\nconst searchTerm = $('Webhook')?.item?.json?.body?.search || \"\";\n\n// RETORNO FINAL PARA O FRONTEND\nreturn {\n  json: {\n    status: \"sucesso\",\n    termo: searchTerm,\n    total: processados.length,\n    data_atualizacao: $now.toFormat('dd/MM/yyyy HH:mm'),\n    // Entregamos como 'filmes' ou 'results', o React vai ler o array\n    filmes: processados \n  }\n};"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1088,
+          256
+        ],
+        "id": "10451622-6d78-493e-b245-9f47fb6892b2",
+        "name": "Code in JavaScript5"
+      },
+      {
+        "parameters": {
+          "jsCode": "// Recupera o termo de forma segura (aceita 'search' ou 'searchTerm')\n// O uso de ?. (optional chaining) evita erro se o webhook estiver vazio no teste\nconst body = $('Webhook')?.item?.json?.body || {};\nconst termo = body.search || body.searchTerm || \"\";\n\n// Mensagem quando não há resultados\nreturn {\n  json: {\n    status: \"sem_resultados\",\n    termo_pesquisado: termo,\n    mensagem: \"Nenhum resultado encontrado para sua busca.\", // Texto neutro (serve pra série e filme)\n    sugestoes: [\n      \"Verifique a ortografia\",\n      \"Tente usar o título original em inglês\",\n      \"Use termos mais genéricos\",\n      \"Certifique-se de estar na aba correta (Filmes ou Séries)\" // Dica nova importante!\n    ],\n    total_encontrado: 0,\n    data_pesquisa: $now.toFormat('dd/MM/yyyy HH:mm'),\n    \n    // MANTENHA ISSO! É o que salva seu Frontend da Tela Preta.\n    // O React vai receber uma lista vazia e mostrar a mensagem de \"Nenhum conteúdo\" que criamos.\n    filmes: [] \n  }\n};"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          352,
+          512
+        ],
+        "id": "587d7634-9b11-45ff-9d1b-d777b6ce402f",
+        "name": "Code in JavaScript6"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 3
+            },
+            "conditions": [
+              {
+                "id": "996f5b0d-cc7b-4f9b-ab1b-5ac68082359f",
+                "leftValue": "={{ $json.results }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "array",
+                  "operation": "notEmpty",
+                  "singleValue": true
+                }
+              },
+              {
+                "id": "1a6e0131-d644-496e-8578-fa391563261b",
+                "leftValue": "={{ $json.total_results }}",
+                "rightValue": 0,
+                "operator": {
+                  "type": "number",
+                  "operation": "notEquals"
+                }
+              }
+            ],
+            "combinator": "or"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          96,
+          352
+        ],
+        "id": "aa904903-31b4-4e62-96c5-a9b7fa35a7cf",
+        "name": "If"
+      },
+      {
+        "parameters": {
+          "fieldToSplitOut": "results",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.splitOut",
+        "typeVersion": 1,
+        "position": [
+          560,
+          240
+        ],
+        "id": "75fdc656-17ab-4c14-ac09-e1ab34ab99a7",
+        "name": "Split Out3"
+      },
+      {
+        "parameters": {
+          "url": "=https://api.themoviedb.org/3/tv/{{ $json.id }}/videos",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.3,
+        "position": [
+          736,
+          368
+        ],
+        "id": "40cd9694-558a-47d3-a856-84890092702a",
+        "name": "HTTP Request5",
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "pGkVDlfdCBPubUGH",
+            "name": "Header Auth account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "options": {
+            "responseHeaders": {
+              "entries": [
+                {
+                  "name": "Access-Control-Allow-Origin",
+                  "value": "*"
+                },
+                {
+                  "name": "Content-type",
+                  "value": "Application/json"
+                }
+              ]
+            }
+          }
+        },
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.5,
+        "position": [
+          1328,
+          512
+        ],
+        "id": "cbdbf719-c238-4539-83ca-1578d8d3b153",
+        "name": "Respond to Webhook3"
+      },
+      {
+        "parameters": {
+          "jsCode": "// 1. Pega os dados\nconst item = $input.first();\nconst json = item.json;\n\n// 2. Pega a lista original ou vazia\nconst todosItens = json.results || [];\n\n// 3. Corta para apenas 20 itens e normaliza os nomes\nconst top20Itens = todosItens.slice(0, 20).map(item => {\n    \n    // DETECÇÃO AUTOMÁTICA: Filme ou Série?\n    // Se tiver 'name', é série. Se não, assumimos filme.\n    const isSerie = item.name ? true : false;\n\n    return {\n      id: item.id,\n      \n      // BLINDAGEM DE TÍTULO (Pega title OU name)\n      title: item.title || item.name || item.original_title || \"Sem Título\",\n      original_title: item.original_title || item.original_name,\n      \n      overview: item.overview,\n      \n      // BLINDAGEM DE DATA (Pega release_date OU first_air_date)\n      release_date: item.release_date || item.first_air_date,\n      \n      poster_path: item.poster_path,\n      backdrop_path: item.backdrop_path,\n      vote_average: item.vote_average,\n      popularity: item.popularity,\n      \n      // CAMPO EXTRA IMPORTANTE PRO FRONTEND\n      tipo: isSerie ? 'tv' : 'movie'\n    };\n});\n\n// 4. RETORNA UM ÚNICO ITEM com o campo \"results\"\n// Mantive sua estrutura para o \"Split Out\" funcionar!\nreturn {\n  json: {\n    results: top20Itens\n  }\n};"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          352,
+          240
+        ],
+        "id": "96c4ed38-bcd9-4df9-a070-a4c57ddd9fc7",
+        "name": "Code in JavaScript7"
+      },
+      {
+        "parameters": {
+          "mode": "combine",
+          "combineBy": "combineByPosition",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.merge",
+        "typeVersion": 3.2,
+        "position": [
+          912,
+          256
+        ],
+        "id": "160072ad-fc17-4a43-a245-497291b35953",
+        "name": "Merge3"
+      },
+      {
+        "parameters": {
+          "url": "https://api.themoviedb.org/3/discover/movie",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendQuery": true,
+          "queryParameters": {
+            "parameters": [
+              {
+                "name": "language",
+                "value": "pt-BR"
+              },
+              {
+                "name": "sort_by",
+                "value": "popularity.desc"
+              },
+              {
+                "name": "with_genres",
+                "value": "={{ $('Webhook').item.json.body.genre_id }}"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.3,
+        "position": [
+          -160,
+          832
+        ],
+        "id": "d024eec7-7589-4cf6-bcc0-2b6244a6ed58",
+        "name": "HTTP Request6",
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "pGkVDlfdCBPubUGH",
+            "name": "Header Auth account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "fieldToSplitOut": "results",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.splitOut",
+        "typeVersion": 1,
+        "position": [
+          48,
+          832
+        ],
+        "id": "a75281be-a3bf-4a60-9f9b-8578387f7dd1",
+        "name": "Split Out4"
+      },
+      {
+        "parameters": {},
+        "type": "n8n-nodes-base.merge",
+        "typeVersion": 3.2,
+        "position": [
+          544,
+          848
+        ],
+        "id": "e2270617-56c0-4c67-9336-7fc451dad295",
+        "name": "Merge4"
+      },
+      {
+        "parameters": {
+          "url": "=https://api.themoviedb.org/3/movie/{{ $json.id }}/videos",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.3,
+        "position": [
+          304,
+          944
+        ],
+        "id": "8ccd0b87-2300-497b-9f41-d36939d070f5",
+        "name": "busca id para video2",
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "pGkVDlfdCBPubUGH",
+            "name": "Header Auth account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "// ===== PROCESSADOR DE FILMES COM VÍDEOS - VERSÃO CORRIGIDA =====\n\n// 1. Pega todos os items recebidos\nconst items = $input.all();\n\nif (!items || items.length === 0) {\n  return [{\n    json: {\n      status: \"erro\",\n      mensagem: \"Nenhum dado recebido\",\n      filmes: []\n    }\n  }];\n}\n\n// 2. Verifica se o primeiro item tem a estrutura esperada\nconst primeiroItem = items[0].json;\n\n// 3. Separa os dados de filmes dos dados de vídeos\nconst dadosFilmes = [];\nconst dadosVideos = {};\n\n// Processa cada item\nitems.forEach(item => {\n  const json = item.json;\n  \n  // Se o item tem \"results\" e é um array de vídeos\n  if (json.id && json.results && Array.isArray(json.results)) {\n    // Este é um objeto de vídeos\n    dadosVideos[json.id] = json.results;\n  } \n  // Se o item tem dados de filme\n  else if (json.title || json.name) {\n    dadosFilmes.push(json);\n  }\n});\n\nconsole.log('Total de filmes:', dadosFilmes.length);\nconsole.log('Total de vídeos mapeados:', Object.keys(dadosVideos).length);\n\n// 4. Processa os filmes limitando a 10\nconst filmesProcessados = dadosFilmes.slice(0, 10).map(filme => {\n  \n  // 1. BUSCA O VÍDEO DO FILME\n  let videoUrl = null;\n  const videosDoFilme = dadosVideos[filme.id] || [];\n  \n  console.log(`Filme ${filme.id}: ${videosDoFilme.length} vídeos encontrados`);\n  \n  if (videosDoFilme.length > 0) {\n    // Procura por Trailer oficial no YouTube\n    const video = videosDoFilme.find(v => \n      v.type === \"Trailer\" && \n      v.site === \"YouTube\" && \n      v.official === true\n    ) || videosDoFilme.find(v => \n      v.site === \"YouTube\"\n    );\n    \n    if (video?.key) {\n      videoUrl = `https://www.youtube.com/embed/${video.key}`;\n      console.log(`✓ Vídeo encontrado para ${filme.title}: ${video.key}`);\n    }\n  }\n\n  // 2. IMAGENS\n  const posterUrl = filme.poster_path \n    ? `https://image.tmdb.org/t/p/w500${filme.poster_path}` \n    : null;\n\n  const backdropUrl = filme.backdrop_path\n    ? `https://image.tmdb.org/t/p/w780${filme.backdrop_path}`\n    : null;\n\n  // 3. TEXTOS\n  const overview = filme.overview || \"Sinopse indisponível.\";\n  const frases = overview.split(/[.!?]/).filter(f => f.trim().length > 15);\n  \n  const headline = frases.length > 0 \n    ? frases[0].trim() + '.'\n    : overview.substring(0, 100) + '...';\n\n  const sinopse = overview.length > 300 \n    ? overview.substring(0, 297) + '...'\n    : overview;\n\n  // 4. RETORNO DO OBJETO\n  return {\n    id_original: filme.id,\n    titulo_pt: filme.title || filme.name || \"Título Desconhecido\",\n    titulo_original: filme.original_title || filme.original_name,\n    headline: headline,\n    sinopse: sinopse,\n    ano: filme.release_date ? filme.release_date.split('-')[0] : \"----\",\n    data_lancamento: filme.release_date || filme.first_air_date || null,\n    poster: posterUrl,\n    backdrop: backdropUrl,\n    nota: filme.vote_average ? Number(filme.vote_average.toFixed(1)) : 0.0,\n    total_votos: filme.vote_count || 0,\n    popularidade: filme.popularity || 0,\n    video_url: videoUrl,\n    idioma_original: filme.original_language || \"en\"\n  };\n});\n\n// 5. RETORNA NO FORMATO CORRETO DO N8N\nreturn [{\n  json: {\n    status: \"sucesso\",\n    total_filmes: filmesProcessados.length,\n    filmes_com_video: filmesProcessados.filter(f => f.video_url).length,\n    data_atualizacao: $now.toFormat('dd/MM/yyyy HH:mm'),\n    filmes: filmesProcessados\n  }\n}];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          752,
+          848
+        ],
+        "id": "ab9d0275-2e6e-4a7c-9fb0-8bac8e82c8be",
+        "name": "Code in JavaScript8"
+      },
+      {
+        "parameters": {
+          "options": {}
+        },
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.5,
+        "position": [
+          960,
+          848
+        ],
+        "id": "f8d4b26a-2e1d-4e63-a409-b41ee814c47e",
+        "name": "Respond to Webhook4"
+      },
+      {
+        "parameters": {
+          "url": "https://api.themoviedb.org/3/discover/tv",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendQuery": true,
+          "queryParameters": {
+            "parameters": [
+              {
+                "name": "language",
+                "value": "pt-BR"
+              },
+              {
+                "name": "sort_by",
+                "value": "popularity.desc"
+              },
+              {
+                "name": "with_genres",
+                "value": "={{ $('Webhook').item.json.body.genre_id }}"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.3,
+        "position": [
+          -224,
+          1248
+        ],
+        "id": "199e74af-3164-4a23-b17f-05bba7a2c75d",
+        "name": "HTTP Request7",
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "pGkVDlfdCBPubUGH",
+            "name": "Header Auth account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "fieldToSplitOut": "results",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.splitOut",
+        "typeVersion": 1,
+        "position": [
+          -16,
+          1248
+        ],
+        "id": "50b99f63-d4e6-45b2-95bf-f78fb8405582",
+        "name": "Split Out5"
+      },
+      {
+        "parameters": {},
+        "type": "n8n-nodes-base.merge",
+        "typeVersion": 3.2,
+        "position": [
+          480,
+          1264
+        ],
+        "id": "0be6e55d-880d-4b22-a64b-e577d2cc98ee",
+        "name": "Merge5"
+      },
+      {
+        "parameters": {
+          "url": "=https://api.themoviedb.org/3/tv/{{ $json.id }}/videos",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.3,
+        "position": [
+          240,
+          1360
+        ],
+        "id": "6548058a-acce-4e3e-8b36-06ea9cf07be7",
+        "name": "busca id para video3",
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "pGkVDlfdCBPubUGH",
+            "name": "Header Auth account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "// ===== PROCESSADOR DE SÉRIES POR CATEGORIA - VERSÃO CORRIGIDA =====\n\n// 1. Pega todos os items recebidos do Merge\nconst items = $input.all();\n\nif (!items || items.length === 0) {\n  return [{\n    json: {\n      status: \"erro\",\n      mensagem: \"Nenhum dado recebido\",\n      series: []\n    }\n  }];\n}\n\nconsole.log('📊 Total de items recebidos:', items.length);\n\n// 2. Separa séries de vídeos\nconst dadosSeries = [];\nconst dadosVideos = {};\n\nitems.forEach(item => {\n  const json = item.json;\n  \n  // Se tem 'results' e 'id', é um objeto de vídeos\n  if (json.id && json.results && Array.isArray(json.results)) {\n    dadosVideos[json.id] = json.results;\n    console.log(`🎬 Vídeos mapeados para série ID ${json.id}: ${json.results.length} vídeos`);\n  }\n  // Se tem 'name' (séries usam 'name' ao invés de 'title'), é uma série\n  else if (json.name || json.original_name) {\n    dadosSeries.push(json);\n  }\n});\n\nconsole.log('📺 Total de séries encontradas:', dadosSeries.length);\nconsole.log('🎥 Total de IDs com vídeos:', Object.keys(dadosVideos).length);\n\n// 3. Processa as séries\nconst seriesProcessadas = dadosSeries.map(serie => {\n  \n  // 1. BUSCA VÍDEOS DA SÉRIE\n  let videoUrl = null;\n  const videosDaSerie = dadosVideos[serie.id] || [];\n  \n  console.log(`🔍 Série \"${serie.name}\" (ID: ${serie.id}): ${videosDaSerie.length} vídeos`);\n  \n  if (videosDaSerie.length > 0) {\n    // Prioridade: Trailer oficial do YouTube\n    const video = videosDaSerie.find(v => \n      v.type === \"Trailer\" && \n      v.site === \"YouTube\" && \n      v.official === true\n    ) || videosDaSerie.find(v => \n      v.site === \"YouTube\" && \n      v.type === \"Trailer\"\n    ) || videosDaSerie.find(v => \n      v.site === \"YouTube\"\n    );\n    \n    if (video?.key) {\n      videoUrl = `https://www.youtube.com/embed/${video.key}`;\n      console.log(`✅ Vídeo encontrado: ${video.name}`);\n    }\n  }\n\n  // 2. IMAGENS\n  const posterUrl = serie.poster_path \n    ? `https://image.tmdb.org/t/p/w500${serie.poster_path}` \n    : null;\n\n  const backdropUrl = serie.backdrop_path\n    ? `https://image.tmdb.org/t/p/original${serie.backdrop_path}`\n    : null;\n\n  // 3. TEXTOS\n  const overview = serie.overview || \"Sinopse indisponível.\";\n  const frases = overview.split(/[.!?]/).filter(f => f.trim().length > 15);\n  \n  const headline = frases.length > 0 \n    ? frases[0].trim() + '.'\n    : overview.substring(0, 100) + '...';\n\n  const sinopse = overview.length > 300 \n    ? overview.substring(0, 297) + '...'\n    : overview;\n\n  // 4. DATA\n  const dataBruta = serie.first_air_date || \"\";\n  const ano = dataBruta ? dataBruta.split('-')[0] : \"----\";\n\n  // 5. RETORNO (formato compatível com frontend)\n  return {\n    id: serie.id,\n    titulo: serie.name || serie.original_name || \"Título Desconhecido\",\n    titulo_original: serie.original_name,\n    headline: headline,\n    sinopse: sinopse,\n    ano: ano,\n    data_lancamento: serie.first_air_date || null,\n    poster: posterUrl,\n    backdrop: backdropUrl,\n    nota: serie.vote_average ? Number(serie.vote_average.toFixed(1)) : 0.0,\n    total_votos: serie.vote_count || 0,\n    popularidade: serie.popularity || 0,\n    video_url: videoUrl,\n    tipo: 'tv',\n    idioma_original: serie.original_language || \"en\"\n  };\n});\n\nconsole.log(`✨ ${seriesProcessadas.length} séries processadas`);\nconsole.log(`🎬 ${seriesProcessadas.filter(s => s.video_url).length} séries com vídeo`);\n\n// 6. RETORNA NO FORMATO CORRETO\nreturn [{\n  json: {\n    status: \"sucesso\",\n    tipo: \"series\",\n    total_series: seriesProcessadas.length,\n    series_com_video: seriesProcessadas.filter(s => s.video_url).length,\n    data_atualizacao: $now.toFormat('dd/MM/yyyy HH:mm'),\n    series: seriesProcessadas\n  }\n}];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          688,
+          1264
+        ],
+        "id": "9bec9098-7471-47ad-ae7d-ba4bf05de0e7",
+        "name": "Code in JavaScript9"
+      },
+      {
+        "parameters": {
+          "options": {}
+        },
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.5,
+        "position": [
+          896,
+          1264
+        ],
+        "id": "6fa0bdad-c496-40e4-b6c3-9b3af0cc7902",
+        "name": "Respond to Webhook5"
+      }
+    ],
+    "connections": {
+      "HTTP Request1": {
+        "main": [
+          [
+            {
+              "node": "Split Out",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Webhook": {
+        "main": [
+          [
+            {
+              "node": "Edit Fields",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "busca id para video": {
+        "main": [
+          [
+            {
+              "node": "Merge",
+              "type": "main",
+              "index": 1
+            }
+          ]
+        ]
+      },
+      "Merge": {
+        "main": [
+          [
+            {
+              "node": "Code in JavaScript2",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Split Out": {
+        "main": [
+          [
+            {
+              "node": "busca id para video",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Merge",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Code in JavaScript2": {
+        "main": [
+          [
+            {
+              "node": "Respond to Webhook",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "HTTP Request": {
+        "main": [
+          [
+            {
+              "node": "If1",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Code in JavaScript": {
+        "main": [
+          [
+            {
+              "node": "Respond to Webhook1",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Code in JavaScript1": {
+        "main": [
+          [
+            {
+              "node": "Respond to Webhook1",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "If1": {
+        "main": [
+          [
+            {
+              "node": "Code in JavaScript3",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Code in JavaScript1",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Split Out1": {
+        "main": [
+          [
+            {
+              "node": "HTTP Request2",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Merge1",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "HTTP Request2": {
+        "main": [
+          [
+            {
+              "node": "Merge1",
+              "type": "main",
+              "index": 1
+            }
+          ]
+        ]
+      },
+      "Code in JavaScript3": {
+        "main": [
+          [
+            {
+              "node": "Split Out1",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Merge1": {
+        "main": [
+          [
+            {
+              "node": "Code in JavaScript",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Edit Fields": {
+        "main": [
+          [
+            {
+              "node": "Switch",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Switch": {
+        "main": [
+          [
+            {
+              "node": "HTTP Request1",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "HTTP Request",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "HTTP Request3",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "HTTP Request4",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "HTTP Request6",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "HTTP Request7",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "HTTP Request3": {
+        "main": [
+          [
+            {
+              "node": "Split Out2",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Merge2": {
+        "main": [
+          [
+            {
+              "node": "Code in JavaScript4",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "busca id para video1": {
+        "main": [
+          [
+            {
+              "node": "Merge2",
+              "type": "main",
+              "index": 1
+            }
+          ]
+        ]
+      },
+      "Split Out2": {
+        "main": [
+          [
+            {
+              "node": "busca id para video1",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Merge2",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Code in JavaScript4": {
+        "main": [
+          [
+            {
+              "node": "Respond to Webhook2",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "HTTP Request4": {
+        "main": [
+          [
+            {
+              "node": "If",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Code in JavaScript5": {
+        "main": [
+          [
+            {
+              "node": "Respond to Webhook3",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Code in JavaScript6": {
+        "main": [
+          [
+            {
+              "node": "Respond to Webhook3",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "If": {
+        "main": [
+          [
+            {
+              "node": "Code in JavaScript7",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Code in JavaScript6",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Split Out3": {
+        "main": [
+          [
+            {
+              "node": "HTTP Request5",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Merge3",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "HTTP Request5": {
+        "main": [
+          [
+            {
+              "node": "Merge3",
+              "type": "main",
+              "index": 1
+            }
+          ]
+        ]
+      },
+      "Code in JavaScript7": {
+        "main": [
+          [
+            {
+              "node": "Split Out3",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Merge3": {
+        "main": [
+          [
+            {
+              "node": "Code in JavaScript5",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "HTTP Request6": {
+        "main": [
+          [
+            {
+              "node": "Split Out4",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Split Out4": {
+        "main": [
+          [
+            {
+              "node": "Merge4",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "busca id para video2",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "busca id para video2": {
+        "main": [
+          [
+            {
+              "node": "Merge4",
+              "type": "main",
+              "index": 1
+            }
+          ]
+        ]
+      },
+      "Merge4": {
+        "main": [
+          [
+            {
+              "node": "Code in JavaScript8",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Code in JavaScript8": {
+        "main": [
+          [
+            {
+              "node": "Respond to Webhook4",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "HTTP Request7": {
+        "main": [
+          [
+            {
+              "node": "Split Out5",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Split Out5": {
+        "main": [
+          [
+            {
+              "node": "Merge5",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "busca id para video3",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Merge5": {
+        "main": [
+          [
+            {
+              "node": "Code in JavaScript9",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "busca id para video3": {
+        "main": [
+          [
+            {
+              "node": "Merge5",
+              "type": "main",
+              "index": 1
+            }
+          ]
+        ]
+      },
+      "Code in JavaScript9": {
+        "main": [
+          [
+            {
+              "node": "Respond to Webhook5",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "authors": "yury turatti",
+    "name": "Version 03da4c2a",
+    "description": "",
+    "autosaved": true,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-02-09T11:37:26.172Z",
+        "id": 315,
+        "workflowId": "PlRDmPq3DiSdCLmuHoAFc",
+        "versionId": "03da4c2a-dc30-4d68-b85a-1477f4253b8d",
+        "event": "activated",
+        "userId": "94d3cb17-5370-45a8-88e0-fada9a3f091b"
+      }
+    ]
+  }
+}
